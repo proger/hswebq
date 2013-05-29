@@ -22,3 +22,6 @@ executable hswebq
                      , http-types
                      , wai-extra
                      , scotty
+                     , ekg
+
+  ghc-options:         -with-rtsopts=-T

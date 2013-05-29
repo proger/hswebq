@@ -18,12 +18,14 @@ import Network.Wai.Middleware.RequestLogger
 import Web.Scotty
 import Network.HTTP.Types.Status (badRequest400)
 
+import qualified System.Remote.Monitoring as Mon
+
 text' x = text (x `mappend` "\n")
 
 -- todo: weakrefs
 type PubSubQ = TVar (Map.Map Text (Bool, Set.Set ThreadId))
 
-main = scotty 3000 $ do
+runScotty = scotty 3000 $ do
     middleware logStdoutDev
 
     -- global channel is used for / requests (single writer, random reader)
@@ -83,3 +85,7 @@ main = scotty 3000 $ do
     get "/waitq" $ do
         wq <- liftIO $ atomically $ readTVar waitq
         text' $ pack $ show $ wq
+
+main = do
+        Mon.forkServer "localhost" 3001
+        runScotty
