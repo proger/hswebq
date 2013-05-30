@@ -25,11 +25,18 @@ import qualified System.Remote.Monitoring as Mon
 
 text' x = text (x `mappend` "\n")
 
--- todo: weakrefs
-type PubSubQ = TVar (Map.Map Text (Bool, Set.Set ThreadId))
+show' :: (Show a) => a -> ActionM ()
+show' = text' . pack . show
 
-threadStatus' t = threadStatus t >>= \x -> return (t, x)
-qstats wq = List.concat $ List.map snd $ Map.toList $ Map.map (\(_, threads) -> List.map threadStatus' $ Set.toList threads) wq
+-- todo: weakrefs
+type PubSubQ = Map.Map Text (Bool, Set.Set ThreadId)
+type QThreadStatus = (Text, ThreadId, ThreadStatus)
+
+threadStatus' :: Text -> ThreadId -> IO QThreadStatus
+threadStatus' k t = threadStatus t >>= \x -> return (k, t, x)
+
+qstats :: PubSubQ -> [IO QThreadStatus]
+qstats wq = List.concatMap (\(key, (_, threads)) -> List.map (threadStatus' key) $ Set.toList threads) $ Map.toList wq
 
 runScotty = scotty 3000 $ do
     middleware logStdoutDev
@@ -53,7 +60,7 @@ runScotty = scotty 3000 $ do
 
     -- pub/sub by :key (single writer, multiple simultaneous readers)
     
-    waitq <- liftIO $ atomically $ newTVar Map.empty :: ScottyM PubSubQ
+    waitq <- liftIO $ atomically $ newTVar Map.empty :: ScottyM (TVar PubSubQ)
 
     post "/waitq/:key" $ do
         key <- param "key"
@@ -91,10 +98,10 @@ runScotty = scotty 3000 $ do
     get "/waitq" $ do
         wq <- liftIO $ atomically $ readTVar waitq
         wql <- liftIO $ sequence $ qstats wq
-        text' $ pack $ show $ wql
+        show' $ wql
 
     get "/bug" $ do
-        text' $ pack $ show $ Prelude.head ([] :: [Text])
+        show' $ Prelude.head ([] :: [Text])
 
 main = do
         Mon.forkServer "localhost" 3001
