@@ -24,4 +24,5 @@ executable hswebq
                      , scotty
                      , ekg
 
-  ghc-options:         -with-rtsopts=-T
+  ghc-options:         -rtsopts -with-rtsopts=-T 
+                       -debug

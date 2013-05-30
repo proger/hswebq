@@ -4,15 +4,18 @@ import Data.Text.Lazy
 import Data.Text.Lazy (toStrict)
 import Data.Text.Encoding (encodeUtf8)
 
+import GHC.Conc
 import Control.Concurrent (ThreadId, threadDelay, myThreadId)
 import Control.Concurrent.Chan
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TVar
 
+import Control.Monad (sequence)
 import Control.Monad.IO.Class (liftIO)
 import Data.Monoid (mconcat, mappend)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import qualified Data.List as List
 
 import Network.Wai.Middleware.RequestLogger
 import Web.Scotty
@@ -24,6 +27,9 @@ text' x = text (x `mappend` "\n")
 
 -- todo: weakrefs
 type PubSubQ = TVar (Map.Map Text (Bool, Set.Set ThreadId))
+
+threadStatus' t = threadStatus t >>= \x -> return (t, x)
+qstats wq = List.concat $ List.map snd $ Map.toList $ Map.map (\(_, threads) -> List.map threadStatus' $ Set.toList threads) wq
 
 runScotty = scotty 3000 $ do
     middleware logStdoutDev
@@ -80,11 +86,15 @@ runScotty = scotty 3000 $ do
                     let set = Set.delete me threads
                     writeTVar waitq $ Map.insert key (if set == Set.empty then False else True, set) wq
 
-        text' $ mconcat [key, ": yay! ", pack $ show me]
+        text' $ mconcat [key, ": response ", pack $ show me]
 
     get "/waitq" $ do
         wq <- liftIO $ atomically $ readTVar waitq
-        text' $ pack $ show $ wq
+        wql <- liftIO $ sequence $ qstats wq
+        text' $ pack $ show $ wql
+
+    get "/bug" $ do
+        text' $ pack $ show $ Prelude.head ([] :: [Text])
 
 main = do
         Mon.forkServer "localhost" 3001
